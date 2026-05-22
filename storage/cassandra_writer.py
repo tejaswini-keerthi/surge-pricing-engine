@@ -3,7 +3,7 @@ storage/cassandra_writer.py
 ============================
 Handles all writes to Cassandra for surge pricing results.
 
-Manages connection, retries, and schema initialization.
+Uses lazy imports for Python 3.13 compatibility.
 """
 
 from __future__ import annotations
@@ -12,44 +12,44 @@ import time
 from datetime import datetime
 from typing import Any
 
-from cassandra.cluster import Cluster, Session
-from cassandra.auth import PlainTextAuthProvider
-from cassandra.policies import DCAwareRoundRobinPolicy
 from loguru import logger
 
 from config.settings import settings
 
 
-# =============================================================================
-# CONNECTION
-# =============================================================================
+def _get_cassandra_imports():
+    """Lazy import Cassandra to handle Python 3.13 compatibility."""
+    try:
+        from cassandra.io.asyncioreactor import AsyncioConnection
+        from cassandra.cluster import Cluster
+        from cassandra.policies import DCAwareRoundRobinPolicy
+        return AsyncioConnection, Cluster, DCAwareRoundRobinPolicy
+    except Exception as e:
+        logger.error(f"Cassandra driver import failed: {e}")
+        raise
+
 
 class CassandraClient:
     """
     Manages Cassandra connection and write operations.
-
-    Handles connection retries, keyspace initialization,
-    and prepared statements for efficient writes.
     """
 
     def __init__(self) -> None:
-        self.cluster: Cluster | None = None
-        self.session: Session | None = None
+        self.cluster: Any | None = None
+        self.session: Any | None = None
         self._connect()
         self._initialize_schema()
 
     def _connect(self, max_retries: int = 10) -> None:
-        """
-        Connect to Cassandra with exponential backoff retry.
+        """Connect to Cassandra with exponential backoff retry."""
+        AsyncioConnection, Cluster, DCAwareRoundRobinPolicy = _get_cassandra_imports()
 
-        Args:
-            max_retries: Maximum connection attempts
-        """
         for attempt in range(1, max_retries + 1):
             try:
                 self.cluster = Cluster(
                     contact_points=[settings.cassandra.host],
                     port=settings.cassandra.port,
+                    connection_class=AsyncioConnection,
                     load_balancing_policy=DCAwareRoundRobinPolicy(
                         local_dc="datacenter1"
                     ),
@@ -75,13 +75,8 @@ class CassandraClient:
         )
 
     def _initialize_schema(self) -> None:
-        """
-        Create keyspace and tables if they do not exist.
-
-        Reads schema from storage/schema.cql and executes it.
-        """
+        """Create keyspace and tables if they do not exist."""
         try:
-            # Create keyspace
             self.session.execute(f"""
                 CREATE KEYSPACE IF NOT EXISTS {settings.cassandra.keyspace}
                 WITH replication = {{
@@ -92,7 +87,6 @@ class CassandraClient:
 
             self.session.set_keyspace(settings.cassandra.keyspace)
 
-            # Create surge_results table
             self.session.execute("""
                 CREATE TABLE IF NOT EXISTS surge_results (
                     zone_id          TEXT,
@@ -114,7 +108,6 @@ class CassandraClient:
                   AND default_time_to_live = 604800
             """)
 
-            # Create current_surge table
             self.session.execute("""
                 CREATE TABLE IF NOT EXISTS current_surge (
                     zone_id          TEXT PRIMARY KEY,
@@ -134,15 +127,7 @@ class CassandraClient:
             raise
 
     def write_surge_result(self, result: dict[str, Any]) -> bool:
-        """
-        Write a single surge result to Cassandra.
-
-        Args:
-            result: Dictionary with surge pricing data
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Write a single surge result to Cassandra."""
         try:
             self.session.execute("""
                 INSERT INTO surge_results (
@@ -173,7 +158,6 @@ class CassandraClient:
                 result.get("weather_severity", 1),
             ))
 
-            # Update current surge table
             self.session.execute("""
                 INSERT INTO current_surge (
                     zone_id, city, final_multiplier,
@@ -197,19 +181,7 @@ class CassandraClient:
             return False
 
     def get_historical_avg(self, zone_id: str, hour: int, day_of_week: int) -> dict[str, float]:
-        """
-        Query historical average demand and surge for a zone.
-
-        Used by ML feature engineering to compute demand_spike_factor.
-
-        Args:
-            zone_id: Zone identifier
-            hour: Hour of day (0-23)
-            day_of_week: Day of week (0-6)
-
-        Returns:
-            Dictionary with avg_demand and avg_surge
-        """
+        """Query historical average demand and surge for a zone."""
         try:
             rows = self.session.execute("""
                 SELECT demand_1min, final_multiplier

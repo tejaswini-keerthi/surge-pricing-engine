@@ -32,7 +32,6 @@ from api.models import (
     ZoneSurgeRequest,
 )
 from storage.redis_cache import SurgeCache
-from storage.cassandra_writer import CassandraClient
 from ml.serve_model import surge_predictor
 from streaming.surge_calculator import get_surge_tier
 
@@ -49,7 +48,6 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Allow Streamlit dashboard to call this API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -57,18 +55,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Service start time for uptime calculation
 START_TIME = time.time()
-
-# Initialize storage clients
 surge_cache = SurgeCache()
-cassandra_client: CassandraClient | None = None
+cassandra_client = None
 
 
-def get_cassandra() -> CassandraClient:
+def get_cassandra():
     """Lazy initialize Cassandra client."""
     global cassandra_client
     if cassandra_client is None:
+        from storage.cassandra_writer import CassandraClient
         cassandra_client = CassandraClient()
     return cassandra_client
 
@@ -81,16 +77,7 @@ def build_surge_response(
     zone_id: str,
     cached_data: dict[str, Any],
 ) -> SurgeResponse:
-    """
-    Build SurgeResponse from cached Redis data.
-
-    Args:
-        zone_id: Zone identifier
-        cached_data: Data from Redis cache
-
-    Returns:
-        SurgeResponse object
-    """
+    """Build SurgeResponse from cached Redis data."""
     final_multiplier = cached_data.get("final_multiplier", 1.0)
 
     return SurgeResponse(
@@ -114,11 +101,7 @@ def build_surge_response(
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
-    """
-    Check health of all connected services.
-
-    Returns status of Kafka, Cassandra, Redis, and ML model.
-    """
+    """Check health of all connected services."""
     redis_ok = False
     cassandra_ok = False
 
@@ -150,11 +133,7 @@ async def health_check() -> HealthResponse:
 
 @app.get("/surge/all", response_model=AllSurgesResponse)
 async def get_all_surges() -> AllSurgesResponse:
-    """
-    Get current surge multipliers for all active zones.
-
-    Used by Streamlit dashboard to render the full surge map.
-    """
+    """Get current surge multipliers for all active zones."""
     all_data = surge_cache.get_all_surges()
 
     if not all_data:
@@ -184,15 +163,7 @@ async def get_all_surges() -> AllSurgesResponse:
 
 @app.get("/surge/{zone_id}", response_model=SurgeResponse)
 async def get_surge(zone_id: str) -> SurgeResponse:
-    """
-    Get current surge multiplier for a specific zone.
-
-    Reads from Redis cache for sub-10ms response time.
-    Returns 1.0x (no surge) if zone data is not cached.
-
-    Args:
-        zone_id: Geohash zone identifier
-    """
+    """Get current surge multiplier for a specific zone."""
     cached_data = surge_cache.get_surge(zone_id)
 
     if not cached_data:
@@ -214,18 +185,12 @@ async def get_surge(zone_id: str) -> SurgeResponse:
 
 @app.post("/surge/batch", response_model=dict[str, SurgeResponse])
 async def get_surge_batch(request: ZoneSurgeRequest) -> dict[str, SurgeResponse]:
-    """
-    Get surge multipliers for multiple zones in one request.
-
-    Args:
-        request: ZoneSurgeRequest with list of zone_ids
-    """
+    """Get surge multipliers for multiple zones in one request."""
     result = {}
     for zone_id in request.zone_ids:
         cached_data = surge_cache.get_surge(zone_id)
         if cached_data:
             result[zone_id] = build_surge_response(zone_id, cached_data)
-
     return result
 
 
@@ -234,13 +199,7 @@ async def get_surge_history(
     zone_id: str,
     limit: int = 100,
 ) -> SurgeHistoryResponse:
-    """
-    Get historical surge data for a zone from Cassandra.
-
-    Args:
-        zone_id: Geohash zone identifier
-        limit: Maximum number of historical records to return
-    """
+    """Get historical surge data for a zone from Cassandra."""
     try:
         cassandra = get_cassandra()
         rows = cassandra.session.execute("""
@@ -279,9 +238,7 @@ async def get_surge_history(
 
 @app.get("/zones", response_model=ZoneListResponse)
 async def get_zones() -> ZoneListResponse:
-    """
-    List all active zones with cached surge data.
-    """
+    """List all active zones with cached surge data."""
     all_data = surge_cache.get_all_surges()
     zone_ids = list(all_data.keys())
     cities = list({data.get("city", "unknown") for data in all_data.values()})
@@ -295,11 +252,7 @@ async def get_zones() -> ZoneListResponse:
 
 @app.post("/ml/reload")
 async def reload_model() -> dict[str, Any]:
-    """
-    Reload ML model from disk.
-
-    Call this after running ml/train_model.py to load the new model.
-    """
+    """Reload ML model from disk after retraining."""
     success = surge_predictor.reload()
     return {
         "success": success,

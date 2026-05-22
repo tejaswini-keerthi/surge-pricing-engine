@@ -16,7 +16,6 @@ import joblib
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 from sklearn.model_selection import train_test_split
@@ -35,16 +34,17 @@ from ml.feature_engineering import FEATURE_COLUMNS
 def load_training_data() -> pd.DataFrame:
     """
     Load historical surge data from Cassandra for model training.
+    Falls back to synthetic data if Cassandra is unavailable.
 
     Returns:
         DataFrame with features and target (actual_multiplier)
     """
-    from cassandra.cluster import Cluster
-    from cassandra.policies import DCAwareRoundRobinPolicy
-
     logger.info("Loading training data from Cassandra")
 
     try:
+        from cassandra.cluster import Cluster
+        from cassandra.policies import DCAwareRoundRobinPolicy
+
         cluster = Cluster(
             contact_points=[settings.cassandra.host],
             port=settings.cassandra.port,
@@ -71,7 +71,14 @@ def load_training_data() -> pd.DataFrame:
         df = pd.DataFrame(list(rows))
         cluster.shutdown()
 
-        logger.info(f"Loaded {len(df):,} training samples")
+        if len(df) < settings.ml.training_min_samples:
+            logger.warning(
+                f"Only {len(df)} samples in Cassandra. "
+                "Using synthetic data instead."
+            )
+            return generate_synthetic_data()
+
+        logger.info(f"Loaded {len(df):,} training samples from Cassandra")
         return df
 
     except Exception as e:
@@ -82,8 +89,6 @@ def load_training_data() -> pd.DataFrame:
 def generate_synthetic_data(n_samples: int = 5000) -> pd.DataFrame:
     """
     Generate synthetic training data when Cassandra has insufficient records.
-
-    Creates realistic surge pricing scenarios based on known patterns.
 
     Args:
         n_samples: Number of synthetic samples to generate
@@ -125,21 +130,15 @@ def generate_synthetic_data(n_samples: int = 5000) -> pd.DataFrame:
     df = pd.DataFrame(data)
 
     # Generate target based on realistic surge logic
-    # Higher demand/supply ratio → higher surge
     ratio = df["demand_last_1min"] / (df["available_drivers"] + 1)
     base_surge = np.where(ratio > 3, 2.0,
                  np.where(ratio > 2, 1.5,
                  np.where(ratio > 1.5, 1.2, 1.0)))
 
-    # Weather boost
     weather_boost = (df["weather_severity"] - 1) * 0.15
-    # Rush hour boost
     rush_boost = df["is_rush_hour"].astype(float) * 0.2
-    # Event boost
     event_boost = (df["event_demand_multiplier"] - 1) * 0.3
-    # Holiday boost
     holiday_boost = df["is_holiday"].astype(float) * 0.3
-    # Add noise
     noise = np.random.normal(0, 0.1, n_samples)
 
     actual_multiplier = base_surge + weather_boost + rush_boost + event_boost + holiday_boost + noise
@@ -166,14 +165,12 @@ def train_model(df: pd.DataFrame) -> tuple[xgb.XGBRegressor, StandardScaler, dic
     """
     logger.info("Training XGBoost surge prediction model")
 
-    # Validate minimum samples
     if len(df) < settings.ml.training_min_samples:
         logger.warning(
             f"Only {len(df)} samples available. "
             f"Minimum recommended: {settings.ml.training_min_samples}"
         )
 
-    # Prepare features and target
     X = df[FEATURE_COLUMNS].copy()
     y = df["actual_multiplier"].copy()
 
@@ -184,21 +181,17 @@ def train_model(df: pd.DataFrame) -> tuple[xgb.XGBRegressor, StandardScaler, dic
         if col in X.columns:
             X[col] = X[col].astype(int)
 
-    # Handle missing values
     X = X.fillna(X.median())
     y = y.fillna(1.0)
 
-    # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
 
-    # Scale features
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # Train XGBoost model
     model = xgb.XGBRegressor(
         n_estimators=200,
         max_depth=6,
@@ -219,7 +212,6 @@ def train_model(df: pd.DataFrame) -> tuple[xgb.XGBRegressor, StandardScaler, dic
         verbose=False,
     )
 
-    # Evaluate model
     y_pred = model.predict(X_test_scaled)
     y_pred = np.clip(y_pred, 1.0, settings.surge.multiplier_max)
 
@@ -235,11 +227,7 @@ def train_model(df: pd.DataFrame) -> tuple[xgb.XGBRegressor, StandardScaler, dic
 
     logger.info(f"Model trained — MAE: {mae:.4f}, R²: {r2:.4f}")
 
-    # Log feature importance
-    feature_importance = dict(zip(
-        FEATURE_COLUMNS,
-        model.feature_importances_
-    ))
+    feature_importance = dict(zip(FEATURE_COLUMNS, model.feature_importances_))
     top_features = sorted(
         feature_importance.items(),
         key=lambda x: x[1],
@@ -270,7 +258,6 @@ def save_model(
     model_path = Path(settings.ml.model_path)
     model_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Save model and scaler together
     joblib.dump(
         {"model": model, "scaler": scaler, "metrics": metrics},
         model_path,
@@ -287,16 +274,9 @@ def save_model(
 def run_training() -> None:
     """Main entry point for model training."""
     logger.info("Starting model training pipeline")
-
-    # Load data
     df = load_training_data()
-
-    # Train model
     model, scaler, metrics = train_model(df)
-
-    # Save model
     save_model(model, scaler, metrics)
-
     logger.info("Model training complete")
 
 
