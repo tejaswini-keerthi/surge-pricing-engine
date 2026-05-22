@@ -60,12 +60,9 @@ def calculate_final_surge(
     Returns:
         Final surge multiplier
     """
-    # Use ML prediction if confidence is high enough
     if ml_confidence >= settings.ml.confidence_threshold:
-        # ML can improve on rule-based but never go below it
         final = max(rule_multiplier, ml_multiplier)
     else:
-        # Fall back to rule-based when ML is uncertain
         final = rule_multiplier
 
     return min(final, settings.surge.multiplier_max)
@@ -81,11 +78,11 @@ def get_surge_tier(multiplier: float) -> str:
     Returns:
         Tier string: normal, low, medium, high, maximum
     """
-    if multiplier >= settings.surge.multiplier_high:
+    if multiplier >= settings.surge.multiplier_max:
         return "maximum"
-    elif multiplier >= settings.surge.multiplier_medium:
+    elif multiplier >= settings.surge.multiplier_high:
         return "high"
-    elif multiplier >= settings.surge.multiplier_low:
+    elif multiplier >= settings.surge.multiplier_medium:
         return "medium"
     elif multiplier > 1.0:
         return "low"
