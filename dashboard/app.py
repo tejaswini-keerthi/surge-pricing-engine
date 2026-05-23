@@ -99,7 +99,7 @@ def fetch_zone_history(zone_id: str) -> list:
 
 def render_sidebar(health: dict) -> str:
     """Render sidebar with health status and controls."""
-    st.sidebar.title("🚗 Surge Pricing Engine")
+    st.sidebar.title("Surge Pricing Engine")
     st.sidebar.markdown("---")
 
     # Health status
@@ -244,7 +244,15 @@ def render_zone_detail(surge_data: dict) -> None:
         return
 
     zone_ids = list(zones.keys())
-    selected_zone = st.selectbox("Select Zone for Detail View", zone_ids)
+    zone_labels = {
+        zid: f"{zid} — {zones[zid].get('city', 'Unknown').replace('_', ' ').title()} — {zones[zid].get('surge_tier', 'normal').upper()} ({zones[zid].get('final_multiplier', 1.0):.2f}x)"
+        for zid in zone_ids
+    }
+    selected_zone = st.selectbox(
+        "Select Zone for Detail View",
+        zone_ids,
+        format_func=lambda z: zone_labels[z],
+    )
 
     if selected_zone:
         data = zones[selected_zone]
@@ -280,7 +288,7 @@ def render_zone_detail(surge_data: dict) -> None:
 
 def main() -> None:
     """Main Streamlit app entry point."""
-    st.title("🚗 Real-Time Ride Surge Pricing Engine")
+    st.title("Real-Time Ride Surge Pricing Engine")
     st.markdown(
         "Live surge pricing dashboard powered by "
         "**Kafka → Spark → XGBoost → FastAPI**"

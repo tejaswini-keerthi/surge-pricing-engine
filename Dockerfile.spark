@@ -1,0 +1,11 @@
+FROM apache/spark:3.5.0-python3
+
+USER root
+
+RUN pip install --no-cache-dir loguru pydantic pydantic-settings redis pygeohash requests holidays
+
+WORKDIR /app
+
+ENV PYTHONPATH=/app
+
+CMD ["/opt/spark/bin/spark-submit", "--master", "local[2]", "--packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0", "/app/streaming/spark_streaming_job.py"]
