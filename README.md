@@ -1,13 +1,17 @@
 # Real-Time Ride Surge Pricing Engine
 
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Apache Spark](https://img.shields.io/badge/Apache%20Spark-3.5.0-E25A1C?logo=apachespark&logoColor=white)](https://spark.apache.org/)
-[![Apache Kafka](https://img.shields.io/badge/Apache%20Kafka-7.5-231F20?logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
-[![Redis](https://img.shields.io/badge/Redis-7.2-DC382D?logo=redis&logoColor=white)](https://redis.io/)
-[![Cassandra](https://img.shields.io/badge/Cassandra-4.1-1287B1?logo=apachecassandra&logoColor=white)](https://cassandra.apache.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=FFD43B)](https://www.python.org/)
+[![Apache Spark](https://img.shields.io/badge/Apache%20Spark-3.5.0-E25A1C?style=flat&logo=apachespark&logoColor=white)](https://spark.apache.org/)
+[![Apache Kafka](https://img.shields.io/badge/Apache%20Kafka-7.5-231F20?style=flat&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
+[![Redis](https://img.shields.io/badge/Redis-7.2-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io/)
+[![Cassandra](https://img.shields.io/badge/Cassandra-4.1-1287B1?style=flat&logo=apachecassandra&logoColor=white)](https://cassandra.apache.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.39-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![XGBoost](https://img.shields.io/badge/XGBoost-2.1-006400?style=flat&logo=xgboost&logoColor=white)](https://xgboost.readthedocs.io/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 
 A production-grade real-time data engineering pipeline that simulates ride-share demand across 44 geo-hashed zones in three US cities and computes surge pricing in under 5 seconds end-to-end. Combines Apache Kafka, Spark Structured Streaming, Redis, an XGBoost ML model, and a FastAPI + Streamlit serving layer — all orchestrated through Docker Compose.
 
@@ -37,9 +41,14 @@ flowchart LR
 
 ## Demo
 
-![demo](docs/demo.gif)
+### Live Dashboard
+![dashboard](docs/dashboard.gif)
 
-See [`docs/`](docs/) for the full demo video and additional screenshots.
+### Pipeline in Action
+![pipeline](docs/terminals.gif)
+
+### REST API and Docker Infrastructure
+![api](docs/docker+api.gif)
 
 ---
 

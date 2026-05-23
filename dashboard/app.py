@@ -252,6 +252,7 @@ def render_zone_detail(surge_data: dict) -> None:
         "Select Zone for Detail View",
         zone_ids,
         format_func=lambda z: zone_labels[z],
+        key="zone_detail_selector",
     )
 
     if selected_zone:

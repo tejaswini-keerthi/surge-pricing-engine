@@ -77,16 +77,56 @@ def build_surge_response(
     zone_id: str,
     cached_data: dict[str, Any],
 ) -> SurgeResponse:
-    """Build SurgeResponse from cached Redis data."""
-    final_multiplier = cached_data.get("final_multiplier", 1.0)
+    """Build SurgeResponse from cached Redis data, computing ML on-the-fly."""
+    from ml.feature_engineering import compute_features
+
+    city = cached_data.get("city", "unknown")
+    demand_1min = int(cached_data.get("demand_1min", 0))
+    demand_5min = int(cached_data.get("demand_5min", 0))
+    demand_15min = int(cached_data.get("demand_15min", 0))
+    available_drivers = max(int(cached_data.get("available_drivers", 30)), 1)
+    weather_severity = int(cached_data.get("weather_severity", 1))
+    is_special_event = bool(cached_data.get("is_special_event", False))
+    rule_multiplier = float(cached_data.get("rule_multiplier", 1.0))
+
+    # Build the 21-feature vector
+    features = compute_features(
+        zone_id=zone_id,
+        city=city,
+        demand_1min=demand_1min,
+        demand_5min=demand_5min,
+        demand_15min=demand_15min,
+        available_drivers=available_drivers,
+        weather_data={
+            "temperature": 15.0,
+            "precipitation": 0.0,
+            "severity": weather_severity,
+        },
+        historical_avg_demand=20.0,
+        historical_avg_surge=1.0,
+        is_special_event=is_special_event,
+        event_multiplier=1.5 if is_special_event else 1.0,
+        timezone="America/New_York",
+    )
+
+    # Get real ML prediction
+    ml_result = surge_predictor.predict(features)
+    ml_multiplier = ml_result["ml_multiplier"]
+    ml_confidence = ml_result["ml_confidence"]
+
+    # Final surge: ML if confident, else rule-based
+    if ml_confidence >= settings.ml.confidence_threshold:
+        final_multiplier = max(rule_multiplier, ml_multiplier)
+    else:
+        final_multiplier = rule_multiplier
 
     return SurgeResponse(
         zone_id=zone_id,
-        city=cached_data.get("city", "unknown"),
-        final_multiplier=final_multiplier,
-        rule_multiplier=cached_data.get("rule_multiplier", 1.0),
-        ml_multiplier=cached_data.get("ml_multiplier", 1.0),
-        ml_confidence=cached_data.get("ml_confidence", 0.0),
+        city=city,
+        final_multiplier=round(final_multiplier, 2),
+        rule_multiplier=rule_multiplier,
+        ml_multiplier=ml_multiplier,
+        ml_confidence=ml_confidence,
         ml_available=surge_predictor.is_loaded,
         surge_tier=get_surge_tier(final_multiplier),
         updated_at=datetime.fromisoformat(
