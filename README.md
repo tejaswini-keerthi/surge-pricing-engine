@@ -21,7 +21,7 @@ A production-grade real-time data engineering pipeline that simulates ride-share
 
 ```mermaid
 flowchart LR
-    A[Ride Simulator<br/>400 evt/sec] -->|publish| B[(Kafka<br/>3 partitions)]
+    A[Ride Simulator<br/>400 evt/sec] -->|publish| B[(Kafka<br/>10 partitions)]
     B -->|consume| C[Spark Structured<br/>Streaming<br/>Docker]
     C -->|aggregate per zone| D[(Redis<br/>60s TTL)]
     C -->|persist| E[(Cassandra<br/>history)]
